@@ -111,19 +111,35 @@ function setupAgendaTable(sheet) {
       'Registration process update']
   ];
 
-  // --- Build rows with start times --------------------------------------
+  // --- Build rows using formulas for the Start column -------------------
   const rows = [];
-  let runningTime = new Date(meetingStart);           // cursor for each start
-  rawItems.forEach(([item, mins, speaker, notes]) => {
-    const startStr = Utilities.formatDate(
-      runningTime, Session.getScriptTimeZone(), 'h:mm a'
-    );
-    rows.push([item, startStr, `${mins} min`, speaker, notes || '']);
-    runningTime = new Date(runningTime.getTime() + minutesToMillis(mins));
+  const startFormulas = [];
+  rawItems.forEach(([item, mins, speaker, notes], i) => {
+    // Formula for the start time: first row uses the entered start,
+    // subsequent rows reference the prior row and length
+    let formula;
+    const rowNum = 9 + i;
+    if (i === 0) {
+      const startStr = Utilities.formatDate(
+        meetingStart,
+        Session.getScriptTimeZone(),
+        'HH:mm'
+      );
+      formula = `=TIMEVALUE("${startStr}")`;
+    } else {
+      formula = `=B${rowNum - 1}+C${rowNum - 1}/1440`;
+    }
+    rows.push([item, '', mins, speaker, notes || '']);
+    startFormulas.push([formula]);
   });
 
-  // --- Drop into sheet ---------------------------------------------------
-  sheet.getRange('A9:E' + (8 + rows.length)).setValues(rows);
+  // --- Drop values and formulas into the sheet --------------------------
+  const range = sheet.getRange('A9:E' + (8 + rows.length));
+  range.setValues(rows);
+  range.offset(0, 1, rows.length, 1).setFormulas(startFormulas);
+  // Format the Start and Length columns
+  sheet.getRange('B9:B' + (8 + rows.length)).setNumberFormat('h:mm am/pm');
+  sheet.getRange('C9:C' + (8 + rows.length)).setNumberFormat('0 "min"');
 }
 
 /******************************************************************
@@ -158,6 +174,8 @@ function formatAgendaSheet(sheet) {
   // Table content – white background
   const lastAgendaRow = sheet.getRange('A8').getNextDataCell(SpreadsheetApp.Direction.DOWN).getRow();
   sheet.getRange(`A9:E${lastAgendaRow}`).setBackground('white');
+  sheet.getRange(`B9:B${lastAgendaRow}`).setNumberFormat('h:mm am/pm');
+  sheet.getRange(`C9:C${lastAgendaRow}`).setNumberFormat('0 "min"');
 
   // Bold main agenda items
   const mains = [9, 10, 11, 17, lastAgendaRow]; // row numbers of bold items
@@ -221,64 +239,6 @@ function setupActionSteps(sheet) {
 }
 
 // Applies formatting to the agenda sheet
-function formatAgendaSheet(sheet) {
-  // Set column widths
-  sheet.setColumnWidth(1, 300); // Agenda Item
-  sheet.setColumnWidth(2, 80);  // Time
-  sheet.setColumnWidth(3, 120); // Speaker
-  sheet.setColumnWidth(4, 200); // Notes
-  
-  // Main title formatting
-  sheet.getRange('A1').setFontSize(18).setFontWeight('bold').setHorizontalAlignment('center')
-    .setBackground('#1f4e79').setFontColor('white');
-  
-  // Subtitle formatting
-  sheet.getRange('A2').setFontSize(12).setHorizontalAlignment('center')
-    .setBackground('#e8f1ff').setFontStyle('italic');
-  
-  // Responsibilities section
-  sheet.getRange('A4').setFontSize(14).setFontWeight('bold').setBackground('#4a90e2').setFontColor('white');
-  sheet.getRange('A5:F6').setBackground('#f8f9fa');
-  
-  // Make responsibility labels bold
-  const responsibilityRanges = ['A5', 'C5', 'E5', 'A6', 'C6', 'E6'];
-  responsibilityRanges.forEach(range => {
-    sheet.getRange(range).setFontWeight('bold');
-  });
-  
-  // Table header formatting
-  sheet.getRange('A8:D8').setFontWeight('bold').setBackground('#4a90e2').setFontColor('white')
-    .setHorizontalAlignment('center');
-  
-  // Table content formatting
-  sheet.getRange('A9:D20').setBackground('white');
-  
-  // Make main agenda items bold
-  const mainItems = ['A9', 'A10', 'A11', 'A17', 'A20'];
-  mainItems.forEach(range => {
-    sheet.getRange(range).setFontWeight('bold');
-  });
-  
-  // Sub-items formatting (indented items)
-  const subItems = ['A12', 'A13', 'A14', 'A15', 'A16', 'A18', 'A19'];
-  subItems.forEach(range => {
-    sheet.getRange(range).setFontStyle('italic').setBackground('#f8f9fa');
-  });
-  
-  // Action steps formatting
-  sheet.getRange('A22').setFontSize(14).setFontWeight('bold').setBackground('#4caf50').setFontColor('white');
-  sheet.getRange('A24:D29').setBackground('#e8f5e8');
-  sheet.getRange('A24').setFontWeight('bold');
-  sheet.getRange('C24').setFontWeight('bold');
-  
-  // Add borders to main sections
-  sheet.getRange('A1:F29').setBorder(true, true, true, true, true, true);
-  sheet.getRange('A8:D20').setBorder(true, true, true, true, true, true);
-  sheet.getRange('A22:D29').setBorder(true, true, true, true, true, true);
-  
-  // Freeze header rows
-  sheet.setFrozenRows(8);
-}
 
 // Archives the current agenda to a separate sheet
 function archiveCurrentAgenda() {
